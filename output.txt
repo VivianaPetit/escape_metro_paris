@@ -1,0 +1,26 @@
+=== PLAN DE ESCAPE CONFIGURADO ===
+Tiempo Total de la Operación: 19 minutos
+
+[PROGRAMACIÓN DE SALIDAS]
+* Pierre arranca en el minuto: 4 (Debe esperar 4 minutos en su estación de origen)
+* Amélie arranca en el minuto: 0
+* Desfase de salida: Pierre debe retrasar su salida exactamente 4 minutos respecto a Amélie para garantizar la llegada simultánea al búnker a los 19 minutos de iniciada la operación.
+
+[RUTA DE PIERRE (Tiempo total de viaje: 15 min)]
+Minuto 4: Estación 1 (Origen - Inicia Movimiento)
+Minuto 8: Estación 2 (Viaje L1)
+Minuto 11: Estación 3 (Viaje L1)
+Minuto 12: Estación 3 (Termina Transbordo a L4)
+Minuto 16: Estación 6 (Viaje L4)
+Minuto 19: Estación 7 (Destino Compuerta D1)
+
+[RUTA DE AMÉLIE (Tiempo total de viaje: 19 min)]
+Minuto 0: Estación 12 (Origen)
+Minuto 5: Estación 13 (Viaje L9)
+Minuto 8: Estación 14 (Viaje L9)
+Minuto 12: Estación 6 (Viaje L9)
+Minuto 14: Estación 6 (Termina Transbordo a L4)
+Minuto 17: Estación 7 (Viaje L4)
+Minuto 19: Estación 8 (Destino Compuerta D2)
+
+Resultado de Sincronización: ÉXITO. Llegada simultánea en el minuto 19.
