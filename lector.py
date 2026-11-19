@@ -1,12 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
-
 from grafo import GrafoMetro
 from restricciones import Restricciones
 
 
 class ErrorEntrada(Exception):
     """Error de formato o de datos en el archivo de entrada."""
+
 
 @dataclass
 class Mision:
@@ -80,8 +80,6 @@ def leer_entrada(ruta: str) -> tuple[GrafoMetro, Mision, Restricciones]:
             rest.lineas_dobles.add(t[1].upper())
         elif clave == "SIN_TRANSBORDO" and len(t) == 4:
             rest.cierres.append((t[1].upper(), _entero(t[2], num), _entero(t[3], num)))
-        elif clave == "SEMILLA" and len(t) == 2:
-            rest.semilla = _entero(t[1], num)
         else:
             raise ErrorEntrada(f"Línea {num}: directiva desconocida o mal formada: {' '.join(t)}")
 

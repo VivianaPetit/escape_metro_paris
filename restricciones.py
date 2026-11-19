@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+
 class Restricciones:
     def __init__(self) -> None:
         self.lineas_dobles: set[str] = set()
         self.cierres: list[tuple[str, int, int]] = []
-        self.semilla: int | None = None
 
     def peso(self, arista) -> int:
         """Tiempo de viaje efectivo de una arista (aplica retrasos técnicos)."""
