@@ -1,0 +1,38 @@
+=== PLAN DE ESCAPE EN EL METRO DE PARÍS ===
+Estaciones: 15 | túneles dirigidos: 34
+Pierre: estación 1 -> puerta D1, estación 7.
+Amélie: estación 12 -> puerta D2, estación 8.
+Tiempo de llegada simultánea: 20 minutos.
+
+[PROGRAMACIÓN DE SALIDAS Y RIESGO]
+  Duración individual mínima sin coordinar: Pierre 15 min; Amélie 19 min.
+  Desfase teórico sin conflictos: Pierre inicia en el minuto 4; Amélie inicia en el minuto 0.
+  Primera salida en túnel del plan conjunto: Pierre, minuto 2; Amélie, minuto 0. Este horario puede ajustarse para evitar colisiones.
+  Riesgo (1 punto por minuto de espera en estación): Pierre 5; Amélie 1; total 6 puntos.
+
+[RUTA DE PIERRE]
+  Origen: estación 1, minuto 0.
+  Minuto 1: espera en la estación 1.
+  Minuto 2: espera en la estación 1.
+  Minuto 2: sale de 1 por L1; llega a 2 en el minuto 6.
+  Minuto 6: sale de 2 por L1; llega a 3 en el minuto 9.
+  Minuto 9: transbordo de 1 min en la estación 3.
+  Minuto 10: sale de 3 por L4; llega a 6 en el minuto 14.
+  Minuto 15: espera en la estación 6.
+  Minuto 16: espera en la estación 6.
+  Minuto 17: espera en la estación 6.
+  Minuto 17: sale de 6 por L4.
+  Minuto 20: llega a la puerta D1 (estación 7).
+
+[RUTA DE AMÉLIE]
+  Origen: estación 12, minuto 0.
+  Minuto 0: sale de 12 por L9; llega a 13 en el minuto 5.
+  Minuto 5: sale de 13 por L9; llega a 14 en el minuto 8.
+  Minuto 8: sale de 14 por L9; llega a 6 en el minuto 12.
+  Minuto 12: transbordo de 2 min en la estación 6.
+  Minuto 14: sale de 6 por L4; llega a 7 en el minuto 17.
+  Minuto 18: espera en la estación 7.
+  Minuto 18: sale de 7 por L4.
+  Minuto 20: llega a la puerta D2 (estación 8).
+
+RESULTADO: ÉXITO. Pierre y Amélie llegan simultáneamente a sus puertas sin colisiones.

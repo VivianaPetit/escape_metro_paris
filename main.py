@@ -1,104 +1,237 @@
+"""Punto de entrada: lee la red y coordina las rutas de Pierre y Amélie."""
+
+from __future__ import annotations
+
+import argparse
 import sys
-from lector import ErrorEntrada, leer_entrada
-from buscador_rutas import Planificador, RastroEspacioTemporal
+from pathlib import Path
+
+from buscador_rutas import (
+    NodoRuta,
+    PlanSincronizado,
+    minutos_espera,
+    minuto_primera_salida,
+    planificar_sincronizacion,
+)
+from red_metro import ErrorEntrada, GrafoMetro, Mision, Restricciones, leer_entrada
+
+
+def _argumentos() -> argparse.Namespace:
+    """Define los argumentos de consola para entrada, salida y modo visual."""
+    parser = argparse.ArgumentParser(
+        description="Planifica el escape en el Metro de París."
+    )
+    parser.add_argument(
+        "entrada",
+        nargs="?",
+        default="input.txt",
+        help="archivo de la red y de la misión (por defecto: input.txt)",
+    )
+    parser.add_argument(
+        "--salida",
+        default="output.txt",
+        help="archivo donde se guarda el reporte (por defecto: output.txt)",
+    )
+    parser.add_argument(
+        "--sin-grafica",
+        action="store_true",
+        help="ejecuta solo el análisis de consola, sin abrir la ventana visual",
+    )
+    return parser.parse_args()
+
+
+def _descripcion_ruta(
+    nombre: str, ruta: list[NodoRuta], destino: str, tiempo_total: int
+) -> list[str]:
+    """Convierte una ruta cronometrada en líneas detalladas para el reporte."""
+    lineas = [f"[RUTA DE {nombre.upper()}]"]
+    if not ruta:
+        return lineas + ["  No se encontró una ruta."]
+
+    lineas.append(f"  Origen: estación {ruta[0].estacion}, minuto 0.")
+    llegada = next(
+        (paso for paso in ruta if paso.evento == "Destino"), ruta[-1]
+    )
+    indice_llegada = ruta.index(llegada)
+    for indice, paso in enumerate(ruta[1:indice_llegada + 1], start=1):
+        if paso.arista is not None:
+            minuto_salida = (
+                paso.minuto_salida
+                if paso.minuto_salida is not None
+                else paso.minuto
+            )
+            anterior = ruta[indice - 1]
+            if minuto_salida > anterior.minuto:
+                demora = minuto_salida - anterior.minuto
+                tipo_espera = (
+                    "transbordo"
+                    if anterior.linea is not None
+                    and anterior.linea != paso.arista.linea
+                    else "espera"
+                )
+                lineas.append(
+                    f"  Minuto {anterior.minuto}: {tipo_espera} de "
+                    f"{demora} min en la estación {anterior.estacion}."
+                )
+            texto = (
+                f"  Minuto {minuto_salida}: sale de {paso.arista.origen} "
+                f"por {paso.arista.linea}"
+            )
+            if paso.evento != "Destino":
+                texto += (
+                    f"; llega a {paso.estacion} en el minuto {paso.minuto}."
+                )
+            else:
+                texto += "."
+            lineas.append(texto)
+        elif paso.evento.startswith("Espera"):
+            lineas.append(
+                f"  Minuto {paso.minuto}: espera en la estación {paso.estacion}."
+            )
+    lineas.append(
+        f"  Minuto {llegada.minuto}: llega a la puerta {destino} "
+        f"(estación {llegada.estacion})."
+    )
+    if tiempo_total > llegada.minuto:
+        lineas.append(
+            f"  Espera en la puerta hasta la llegada simultánea "
+            f"del minuto {tiempo_total}."
+        )
+    return lineas
+
+
+def _descripcion_salidas(plan: PlanSincronizado) -> list[str]:
+    """Explica el desfase ideal, los horarios aplicados y el riesgo acumulado."""
+    duracion_base = max(
+        plan.duracion_minima_pierre,
+        plan.duracion_minima_amelie,
+    )
+    demora_pierre = duracion_base - plan.duracion_minima_pierre
+    demora_amelie = duracion_base - plan.duracion_minima_amelie
+    riesgo_pierre = minutos_espera(plan.ruta_pierre)
+    riesgo_amelie = minutos_espera(plan.ruta_amelie)
+
+    return [
+        "[PROGRAMACIÓN DE SALIDAS Y RIESGO]",
+        "  Duración individual mínima sin coordinar: "
+        f"Pierre {plan.duracion_minima_pierre} min; "
+        f"Amélie {plan.duracion_minima_amelie} min.",
+        "  Desfase teórico sin conflictos: "
+        f"Pierre inicia en el minuto {demora_pierre}; "
+        f"Amélie inicia en el minuto {demora_amelie}.",
+        "  Primera salida en túnel del plan conjunto: "
+        f"Pierre, minuto {minuto_primera_salida(plan.ruta_pierre)}; "
+        f"Amélie, minuto {minuto_primera_salida(plan.ruta_amelie)}. "
+        "Este horario puede ajustarse para evitar colisiones.",
+        "  Riesgo (1 punto por minuto de espera en estación): "
+        f"Pierre {riesgo_pierre}; Amélie {riesgo_amelie}; "
+        f"total {riesgo_pierre + riesgo_amelie} puntos.",
+        "",
+    ]
+
+
+def crear_reporte(
+    grafo_estaciones: int,
+    grafo_tuneles: int,
+    mision: Mision,
+    plan: PlanSincronizado,
+) -> str:
+    """Genera el informe de rutas y llegada simultánea."""
+    lineas = [
+        "=== PLAN DE ESCAPE EN EL METRO DE PARÍS ===",
+        f"Estaciones: {grafo_estaciones} | túneles dirigidos: {grafo_tuneles}",
+        f"Pierre: estación {mision.origen_pierre} -> puerta D1, "
+        f"estación {mision.puerta_pierre}.",
+        f"Amélie: estación {mision.origen_amelie} -> puerta D2, "
+        f"estación {mision.puerta_amelie}.",
+        f"Tiempo de llegada simultánea: {plan.tiempo_total} minutos.",
+        "",
+    ]
+    lineas.extend(_descripcion_salidas(plan))
+    lineas.extend(
+        _descripcion_ruta(
+            "Pierre", plan.ruta_pierre, "D1", plan.tiempo_total
+        )
+    )
+    lineas.append("")
+    lineas.extend(
+        _descripcion_ruta(
+            "Amélie", plan.ruta_amelie, "D2", plan.tiempo_total
+        )
+    )
+    lineas.extend(
+        [
+            "",
+            "RESULTADO: ÉXITO. Pierre y Amélie llegan simultáneamente "
+            "a sus puertas sin colisiones.",
+        ]
+    )
+    return "\n".join(lineas) + "\n"
+
+
+def _mostrar_grafica(
+    grafo: GrafoMetro,
+    mision: Mision,
+    plan: PlanSincronizado,
+    restricciones: Restricciones,
+) -> None:
+    """Importa e inicia la visualización sin cargarla en modo texto."""
+    from visualizador import mostrar_visualizacion
+
+    mostrar_visualizacion(grafo, mision, plan, restricciones)
 
 
 def main() -> int:
-    ruta = sys.argv[1] if len(sys.argv) > 1 else "input.txt"
+    """Ejecuta el flujo completo y devuelve un código de estado para la consola."""
+    argumentos = _argumentos()
+    try:
+        grafo, mision, restricciones = leer_entrada(argumentos.entrada)
+    except (ErrorEntrada, OSError) as error:
+        print(f"Error en la entrada: {error}", file=sys.stderr)
+        return 1
+
+    plan = planificar_sincronizacion(
+        grafo,
+        restricciones,
+        mision.origen_pierre,
+        mision.origen_amelie,
+        mision.puerta_pierre,
+        mision.puerta_amelie,
+    )
+    if plan is None:
+        mensaje = (
+            "No se encontró una llegada simultánea y sin colisiones entre "
+            "Pierre y Amélie dentro del horizonte de búsqueda."
+        )
+        print(mensaje, file=sys.stderr)
+        try:
+            Path(argumentos.salida).write_text(mensaje + "\n", encoding="utf-8")
+        except OSError as error:
+            print(f"No se pudo escribir el reporte: {error}", file=sys.stderr)
+        return 1
+
+    reporte = crear_reporte(
+        grafo.n_estaciones,
+        grafo.n_tuneles,
+        mision,
+        plan,
+    )
+    print(reporte, end="")
 
     try:
-        grafo, mision, rest = leer_entrada(ruta)
-    except (ErrorEntrada, OSError) as e:
-        print(f"Error en la entrada: {e}")
+        Path(argumentos.salida).write_text(reporte, encoding="utf-8")
+    except OSError as error:
+        print(f"No se pudo escribir el reporte: {error}", file=sys.stderr)
         return 1
 
-    print(f"Estaciones: {grafo.n_estaciones} | Túneles: {grafo.n_tuneles}")
-
-    print(f"Pierre: {mision.origen_pierre} -> D1 en {mision.puerta_pierre}")
-    print(f"Amélie: {mision.origen_amelie} -> D2 en {mision.puerta_amelie}")
-
-    print(f"Líneas dobles: {rest.lineas_dobles or 'ninguna'}")
-    print(f"Cierres de transbordo: {rest.cierres or 'ninguno'}")
-    print(f"Semilla de Silvie: {rest.semilla}")
-
-    print("\nLista de adyacencia:")
-    for v in sorted(grafo.estaciones()):
-        salidas = [
-            f"{e.destino}({e.linea}, {e.peso}"
-            + (f"->{rest.peso(e)}" if rest.peso(e) != e.peso else "")
-            + ")"
-            for e in grafo.vecinos(v)
-        ]
-        print(f"Estación {v} [transbordo {grafo.tiempo_transbordo(v)} min] -> {', '.join(salidas) or '-'}")
-
-    print("\nTransbordo L1->L4 en minutos [5,6] permitido?",
-          rest.transbordo_permitido("L1", "L4", 5, 6))
-    print("Transbordo L1->L4 en minutos [10,11] permitido?",
-          rest.transbordo_permitido("L1", "L4", 10, 11))
-
-    planificador = Planificador(grafo, rest)
-
-    # 1. Rutas base
-    nodo_p = planificador.buscar_ruta_individual(mision.origen_pierre, mision.puerta_pierre)
-    nodo_a = planificador.buscar_ruta_individual(mision.origen_amelie, mision.puerta_amelie)
-
-    if not nodo_p or not nodo_a:
-        print("\nError: No hay ruta hacia el búnker para uno o ambos personajes.")
-        return 1
-
-    ruta_p_final = planificador.reconstruir_ruta(nodo_p)
-    tiempo_p = ruta_p_final[-1].minuto
-    tiempo_a = planificador.reconstruir_ruta(nodo_a)[-1].minuto
-
-    # 2. Bucle de sincronización
-    tiempo_operacion = max(tiempo_p, tiempo_a)
-    ruta_a_final = None
-
-    while True:
-        espera_p = tiempo_operacion - tiempo_p
-        espera_a = tiempo_operacion - tiempo_a
-        
-        rastro = RastroEspacioTemporal()
-        rastro.registrar_ruta(ruta_p_final, espera_p)
-        
-        nodo_final_a = planificador.buscar_ruta_sin_colision(
-            mision.origen_amelie, mision.puerta_amelie, espera_a, rastro
-        )
-        
-        if nodo_final_a and nodo_final_a.minuto == tiempo_operacion:
-            ruta_a_final = planificador.reconstruir_ruta(nodo_final_a)
-            break
-        
-        tiempo_operacion += 1
-        if tiempo_operacion > 1440:
-            print("\nImposible sincronizar sin colisiones.")
+    if not argumentos.sin_grafica:
+        try:
+            _mostrar_grafica(grafo, mision, plan, restricciones)
+        except RuntimeError as error:
+            print(f"No se pudo abrir la ventana gráfica: {error}", file=sys.stderr)
+            print("Puedes usar --sin-grafica para ejecutar solo el reporte.")
             return 1
 
-    # 3. Reporte final
-    print("\n" + "="*40)
-    print("=== PLAN DE ESCAPE CONFIGURADO ===")
-    print(f"Tiempo Total de la Operación: {tiempo_operacion} minutos\n")
-    
-    print("[PROGRAMACIÓN DE SALIDAS]")
-    print(f"* Pierre arranca en el minuto: {espera_p}" + (f" (Espera {espera_p} min)" if espera_p > 0 else ""))
-    print(f"* Amélie arranca en el minuto: {espera_a}" + (f" (Espera {espera_a} min)" if espera_a > 0 else ""))
-
-    planificador.imprimir_ruta("Pierre", ruta_p_final, espera_p)
-    
-    tiempo_viaje_a = ruta_a_final[-1].minuto - ruta_a_final[0].minuto
-    print(f"\n[RUTA DE AMÉLIE (Tiempo total de viaje: {tiempo_viaje_a} min)]")
-    
-    for paso in ruta_a_final:
-        if paso.evento == "Origen":
-            estado = f"Inicia tras {espera_a} min de espera" if espera_a > 0 else "Origen"
-            print(f"Minuto {paso.minuto}: Estación {paso.estacion} ({estado})")
-        elif paso.evento == "Destino":
-            print(f"Minuto {paso.minuto}: Estación {paso.estacion} (Destino Compuerta D2)")
-        else:
-            print(f"Minuto {paso.minuto}: Estación {paso.estacion} ({paso.evento})")
-
-    print(f"\nResultado de Sincronización: ÉXITO. Llegada simultánea en el minuto {tiempo_operacion}.")
-    
     return 0
 
 
