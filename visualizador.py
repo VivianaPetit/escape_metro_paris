@@ -24,9 +24,9 @@ _COLORES_PERSONAJE = {
     "Pierre": "#7c3aed",
     "Amélie": "#ea580c",
 }
-_FONDO_APP = "#eef2f7"
+_FONDO_APP = "#e5e7eb"
 _FONDO_TARJETA = "#ffffff"
-_FONDO_MAPA = "#f8fafc"
+_FONDO_MAPA = "#f1f3f5"
 _TEXTO_PRINCIPAL = "#172033"
 _TEXTO_SECUNDARIO = "#64748b"
 _BORDE = "#e2e8f0"
@@ -113,10 +113,11 @@ class VisualizadorMetro:
 
         self.raiz = tk.Tk()
         self.raiz.title("Escape en el Metro de París")
-        ancho = min(1440, max(1000, self.raiz.winfo_screenwidth() - 60))
-        alto = min(900, max(680, self.raiz.winfo_screenheight() - 100))
+        ancho = min(1440, max(760, self.raiz.winfo_screenwidth() - 60))
+        alto = min(900, max(560, self.raiz.winfo_screenheight() - 100))
         self.raiz.geometry(f"{ancho}x{alto}")
-        self.raiz.minsize(1000, 680)
+        self.raiz.minsize(760, 560)
+        self._ancho_panel = min(340, max(260, int(ancho * 0.28)))
         self._configurar_estilos()
 
         self.marco = ttk.Frame(
@@ -158,16 +159,41 @@ class VisualizadorMetro:
 
         self.panel = ttk.Frame(
             self.contenido,
-            width=340,
+            width=self._ancho_panel,
             padding=0,
             style="App.TFrame",
         )
         self.panel.grid(row=0, column=1, sticky="nsew")
         self.panel.grid_propagate(False)
+        self.panel.rowconfigure(0, weight=1)
+        self.panel.columnconfigure(0, weight=1)
+        self.panel_canvas = tk.Canvas(
+            self.panel,
+            background=_FONDO_APP,
+            highlightthickness=0,
+            bd=0,
+        )
+        self.panel_canvas.grid(row=0, column=0, sticky="nsew")
+        self.panel_scrollbar = ttk.Scrollbar(
+            self.panel,
+            orient=tk.VERTICAL,
+            command=self.panel_canvas.yview,
+        )
+        self.panel_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.panel_canvas.configure(yscrollcommand=self.panel_scrollbar.set)
+        self.panel_contenido = ttk.Frame(
+            self.panel_canvas, style="App.TFrame"
+        )
+        self._panel_window = self.panel_canvas.create_window(
+            (0, 0), window=self.panel_contenido, anchor="nw"
+        )
+        self.panel_canvas.bind("<Configure>", self._ajustar_ancho_panel)
+        self.panel_contenido.bind("<Configure>", self._actualizar_region_panel)
 
         self._crear_panel()
         self._dibujar_mapa()
         self._actualizar_posiciones()
+        self.raiz.bind("<Configure>", self._redimensionar_ventana)
 
     def _configurar_estilos(self) -> None:
         """Define una paleta clara y estilos coherentes para la ventana."""
@@ -180,13 +206,13 @@ class VisualizadorMetro:
             "Title.TLabel",
             background=_FONDO_APP,
             foreground=_TEXTO_PRINCIPAL,
-            font=("Segoe UI", 23, "bold"),
+            font=("Segoe UI", 24, "bold"),
         )
         estilo.configure(
             "Subtitle.TLabel",
             background=_FONDO_APP,
             foreground=_TEXTO_SECUNDARIO,
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 11),
         )
         estilo.configure(
             "Metric.TLabel",
@@ -199,19 +225,19 @@ class VisualizadorMetro:
             "Section.TLabel",
             background=_FONDO_TARJETA,
             foreground=_TEXTO_PRINCIPAL,
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 12, "bold"),
         )
         estilo.configure(
             "Muted.TLabel",
             background=_FONDO_TARJETA,
             foreground=_TEXTO_SECUNDARIO,
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 10),
         )
         estilo.configure(
             "Body.TLabel",
             background=_FONDO_TARJETA,
             foreground=_TEXTO_PRINCIPAL,
-            font=("Segoe UI", 10),
+            font=("Segoe UI", 11),
         )
         estilo.configure(
             "Clock.TLabel",
@@ -230,7 +256,7 @@ class VisualizadorMetro:
             "Primary.TButton",
             background=_ACENTO,
             foreground="#ffffff",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 10, "bold"),
             padding=(10, 8),
             borderwidth=0,
         )
@@ -243,7 +269,7 @@ class VisualizadorMetro:
             "Secondary.TButton",
             background="#f1f5f9",
             foreground=_TEXTO_PRINCIPAL,
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 10, "bold"),
             padding=(10, 8),
             borderwidth=0,
         )
@@ -286,13 +312,17 @@ class VisualizadorMetro:
         ttk.Label(
             encabezado, text="RED DEL METRO", style="Section.TLabel"
         ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
+        self.detalle_mapa = ttk.Label(
             encabezado,
             text=f"{self.grafo.n_estaciones} estaciones  ·  "
             f"{self.grafo.n_tuneles} túneles dirigidos  ·  "
             "etiqueta = línea y minutos  ·  t = transbordo",
             style="Muted.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
+            wraplength=900,
+        )
+        self.detalle_mapa.grid(
+            row=1, column=0, sticky="w", pady=(3, 0)
+        )
 
     def _calcular_posiciones(
         self, ancho: int, alto: int
@@ -320,9 +350,34 @@ class VisualizadorMetro:
         if tamano == self._ultimo_tamano_mapa or min(tamano) < 100:
             return
         self._ultimo_tamano_mapa = tamano
+        self.detalle_mapa.configure(wraplength=max(220, evento.width - 10))
         self.posiciones = self._calcular_posiciones(*tamano)
         self._dibujar_mapa()
         self._actualizar_posiciones()
+
+    def _redimensionar_ventana(self, evento: tk.Event) -> None:
+        """Ajusta el panel lateral al espacio disponible en la ventana."""
+        if evento.widget is not self.raiz:
+            return
+        ancho_panel = min(340, max(260, int(evento.width * 0.28)))
+        if ancho_panel != self._ancho_panel:
+            self._ancho_panel = ancho_panel
+            self.panel.configure(width=ancho_panel)
+
+    def _ajustar_ancho_panel(self, evento: tk.Event) -> None:
+        """Mantiene el contenido del panel dentro del ancho visible."""
+        self.panel_canvas.itemconfigure(
+            self._panel_window, width=evento.width
+        )
+        self.estado.configure(wraplength=max(160, evento.width - 44))
+
+    def _actualizar_region_panel(self, _evento: tk.Event) -> None:
+        """Actualiza el área desplazable cuando cambian las tarjetas del panel."""
+        if _evento.widget is not self.panel_contenido:
+            return
+        self.panel_canvas.configure(
+            scrollregion=self.panel_canvas.bbox("all")
+        )
 
     def _calcular_colores_linea(self) -> dict[str, str]:
         """Asigna un color legible y repetible a cada línea del grafo."""
@@ -337,9 +392,11 @@ class VisualizadorMetro:
 
     def _crear_panel(self) -> None:
         """Construye tarjetas de estado, ubicación, leyenda y reproducción."""
-        self.panel.grid_columnconfigure(0, weight=1)
+        self.panel_contenido.grid_columnconfigure(0, weight=1)
 
-        estado = ttk.Frame(self.panel, padding=14, style="Card.TFrame")
+        estado = ttk.Frame(
+            self.panel_contenido, padding=14, style="Card.TFrame"
+        )
         estado.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         ttk.Label(
             estado, text="RESULTADO DE LA MISIÓN", style="Muted.TLabel"
@@ -353,7 +410,9 @@ class VisualizadorMetro:
         )
         self.estado.pack(fill=tk.X)
 
-        ubicaciones = ttk.Frame(self.panel, padding=14, style="Card.TFrame")
+        ubicaciones = ttk.Frame(
+            self.panel_contenido, padding=14, style="Card.TFrame"
+        )
         ubicaciones.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         ttk.Label(
             ubicaciones, text="UBICACIÓN ACTUAL", style="Section.TLabel"
@@ -367,7 +426,7 @@ class VisualizadorMetro:
                 text="●",
                 foreground=color,
                 background=_FONDO_TARJETA,
-                font=("Segoe UI", 11, "bold"),
+                font=("Segoe UI", 12, "bold"),
             ).pack(side=tk.LEFT, padx=(0, 7))
             ttk.Label(
                 fila, text=nombre, style="Body.TLabel", width=8
@@ -383,7 +442,9 @@ class VisualizadorMetro:
                 side=tk.RIGHT, fill=tk.X, expand=True
             )
 
-        leyenda = ttk.Frame(self.panel, padding=14, style="Card.TFrame")
+        leyenda = ttk.Frame(
+            self.panel_contenido, padding=14, style="Card.TFrame"
+        )
         leyenda.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         ttk.Label(
             leyenda, text="LÍNEAS DEL GRAFO", style="Section.TLabel"
@@ -394,7 +455,7 @@ class VisualizadorMetro:
                 text=f"●  {linea}",
                 foreground=color,
                 background=_FONDO_TARJETA,
-                font=("Segoe UI", 9, "bold"),
+                font=("Segoe UI", 10, "bold"),
             ).grid(
                 row=1 + indice // 2,
                 column=indice % 2,
@@ -403,7 +464,9 @@ class VisualizadorMetro:
                 pady=2,
             )
 
-        controles = ttk.Frame(self.panel, padding=14, style="Card.TFrame")
+        controles = ttk.Frame(
+            self.panel_contenido, padding=14, style="Card.TFrame"
+        )
         controles.grid(row=3, column=0, sticky="ew")
         controles.columnconfigure(0, weight=1)
         ttk.Label(
@@ -540,7 +603,7 @@ class VisualizadorMetro:
             my,
             text=texto,
             fill=color,
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI", 9, "bold"),
             tags=("etiqueta_tunel",),
         )
         self.mapa.tag_lower(rectangulo, etiqueta)
@@ -578,7 +641,7 @@ class VisualizadorMetro:
             x,
             y - 1,
             text=str(estacion),
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 11, "bold"),
             fill=_TEXTO_PRINCIPAL,
             tags=("estacion",),
         )
@@ -586,7 +649,7 @@ class VisualizadorMetro:
             x,
             y + 29,
             text=f"t {self.grafo.tiempo_transbordo(estacion)}",
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI", 9, "bold"),
             fill=_TEXTO_SECUNDARIO,
             tags=("estacion",),
         )
@@ -606,7 +669,7 @@ class VisualizadorMetro:
                 y + dy,
                 text=etiqueta,
                 fill=color,
-                font=("Segoe UI", 8, "bold"),
+                font=("Segoe UI", 9, "bold"),
                 tags=("leyenda",),
             )
             caja = self.mapa.bbox(id_texto)
@@ -669,7 +732,7 @@ class VisualizadorMetro:
                 y,
                 text=nombre[0],
                 fill="#ffffff",
-                font=("Segoe UI", 8, "bold"),
+                font=("Segoe UI", 9, "bold"),
                 tags=("dinamico",),
             )
             if posicion.tipo == "estacion":
